@@ -5,6 +5,7 @@
 
 import json
 import requests
+from collections import defaultdict
 
 # requests.py authentication class for a CATMAID server with both token authentication and HTTP Basic authentication
 class catmaid_auth_token( requests.auth.HTTPBasicAuth ):
@@ -152,6 +153,14 @@ def write_skeletons_from_list( id_list, proj_opts ):
         f_nodes = open( 'sk_' + str(id) + '.json' ,'w')
         json.dump(sk,f_nodes)
         f_nodes.close()
+
+def get_connectivity_graph( id_list, proj_opts ):
+    url = proj_opts['baseurl'] + '/{}/skeletons/confidence-compartment-subgraph'.format( proj_opts['project_id'] )
+    opts = {}
+    for i, id in enumerate(id_list):
+        opts['skeleton_ids[{}]'.format(i)] = id
+    d = requests.post( url, data = opts, auth = catmaid_auth_token( proj_opts['token'], proj_opts['authname'], proj_opts['authpass'] ) ).json()
+    return d['edges']
 
 #######
 
