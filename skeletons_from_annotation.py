@@ -11,7 +11,7 @@ def main():
     input_args = { sys.argv[i] : sys.argv[i+1] for i in range(2,len(sys.argv),2) }
 
     proj_opts = cpp.project_map( project_flag )
-    anno_dict = ci.make_annotation_dict(proj_opts))
+    anno_dict = ci.get_annotation_dict(proj_opts)
 
     arg_ids_to_expand = [ anno_dict[arg] for arg in input_args.keys() if input_args[arg]=='1' ]
     arg_ids_noexpand = [ anno_dict[arg] for arg in input_args.keys() if input_args[arg]=='0' ]

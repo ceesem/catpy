@@ -128,7 +128,7 @@ def increase_id_list( id_list, proj_opts, min_pre=0, min_post=0, hops=1):
     url = proj_opts['baseurl'] + '/{}/graph/circlesofhell'.format(proj_opts['project_id'])
     d = requests.post( url, data = postdata, auth = catmaid_auth_token( proj_opts['token'], proj_opts['authname'], proj_opts['authpass'] )).json()
 
-    for id in id_list_base:
+    for id in id_list:
         id_list.append( id )
     id_list = list(set(id_list))
     return id_list
