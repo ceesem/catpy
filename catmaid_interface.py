@@ -77,7 +77,7 @@ def get_annotation_dict( proj_opts ):
     anno_dict = { item['name']:item['id'] for item in all_annotations['annotations'] }
     return anno_dict
 
-# get_ids_from_annotation: Given an annotation id, pull all skeletons with that annotation
+# get_ids_from_annotation: Given an annotation id, get all skeleton ids with that annotation
 def get_ids_from_annotation( annotation_id_list, proj_opts ):
     if type(annotation_id_list) is not list:
         raise TypeError('annotation_id_list must be a list even if just one element')

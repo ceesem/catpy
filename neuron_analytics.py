@@ -20,9 +20,39 @@ def neuron_graph( id_list, proj_opts ):
 def neuron_graph_from_annotations( annotation_list, proj_opts, anno_dict = None):
     if anno_dict is None:
         anno_dict = ci.get_annotation_dict( proj_opts )
-    anno_id_list = [ anno_dict[ anno ] for anno in annotation_list ]
+
+    anno_id_list = list()
+    for anno in annotation_list:
+        try:
+            anno_id_list.append( anno_dict[anno] )
+        except KeyError:
+            print( 'Not a valid key: ' + anno + ' (skipping)')
+
     skid_list = ci.get_ids_from_annotation( anno_id_list, proj_opts )
-    return neuron_graph( skid_list, proj_opts )
+    g = neuron_graph( skid_list, proj_opts )
+    g = append_annotation_list(g, annotation_list, proj_opts, anno_dict=anno_dict)
+
+    return g
+
+# Given a list of annotations (as a string), add a node property to each skeleton containing which annotations they have
+def append_annotation_list( g, annotation_list, proj_opts, anno_dict = None):
+    if anno_dict is None:
+        anno_dict = ci.get_annotation_dict( proj_opts )
+
+    for anno in annotation_list:
+        try:
+            anno_id = [ anno_dict[anno] ]
+            for skid in ci.get_ids_from_annotation( anno_id, proj_opts ):
+                if skid in g.nodes():
+                    if 'annotations' in g.node[skid].keys():
+                        if anno not in g.node[skid]['annotations']:
+                            g.node[skid]['annotations'].append(anno)
+                    else:
+                        g.node[skid]['annotations'] = [anno]
+        except KeyError:
+            print( 'Not a valid key: ' + anno + ' (skipping)')
+    return g
+
 
 #
 # class neuron_obj:
