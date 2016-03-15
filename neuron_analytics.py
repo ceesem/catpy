@@ -55,6 +55,16 @@ def append_annotation_list( g, annotation_list, proj_opts, anno_dict = None):
             print( 'Not a valid key: ' + anno + ' (skipping)')
     return g
 
+def write_node_info( g, filename, delimiter=',' ):
+    f_nodeinfo = open(filename,'w')
+    for id, node in g.nodes_iter(data=True):
+        f_nodeinfo.write( str(id) )
+        f_nodeinfo.write(delimiter+node['name'])
+        for anno in node['annotations']:
+            f_nodeinfo.write(delimiter+anno)
+        f_nodeinfo.write('\n')
+    f_nodeinfo.close()
+
 
 #
 # class neuron_obj:
