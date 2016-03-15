@@ -17,7 +17,7 @@ def neuron_graph( id_list, proj_opts ):
     return g
 
 # Build a neuron graph from a human readable list of annotation strings
-def neuron_graph_from_annotations( annotation_list, proj_opts, anno_dict = None):
+def neuron_graph_from_annotations( annotation_list, proj_opts, anno_dict = None, append_annotations=True):
     if anno_dict is None:
         anno_dict = ci.get_annotation_dict( proj_opts )
 
@@ -30,7 +30,9 @@ def neuron_graph_from_annotations( annotation_list, proj_opts, anno_dict = None)
 
     skid_list = ci.get_ids_from_annotation( anno_id_list, proj_opts )
     g = neuron_graph( skid_list, proj_opts )
-    g = append_annotation_list(g, annotation_list, proj_opts, anno_dict=anno_dict)
+
+    if append_annotations:
+        g = append_annotation_list(g, annotation_list, proj_opts, anno_dict=anno_dict)
 
     return g
 
