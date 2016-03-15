@@ -1,26 +1,31 @@
 import catmaid_interface as ci
-from graph_tool import *
+import networkx as nx
 
-def make_neuron_graph( id_list, proj_opts ):
-    g = Graph()
-    g.add_vertex( len( id_list ) )
-    skids = g.new_vertex_property("int")
-    names = g.new_vertex_property("string")
-    num_synapses = g.new_edge_property("double")
+# Build a networkx neuron graph from a list of skeleton ids
+def neuron_graph( id_list, proj_opts ):
+    g = nx.DiGraph()
 
-    id2vertex = {}
-    for i, id in enumerate( id_list ):
-        skids[ g.vertex(i) ] = id
-        names[ g.vertex(i) ] = ci.get_neuron_name( id, proj_opts )
-        id2vertex[ id ] = g.vertex(i)
-    g.vertex_properties['skid'] = skids
-    g.vertex_properties['name'] = names
+    for id in id_list:
+        g.add_node( id )
+        g.node[id]['name'] = ci.get_neuron_name( id, proj_opts )
 
-    cm_edges = get_connectivity_graph( id_list, proj_opts )
+    cm_edges = ci.get_connectivity_graph( id_list, proj_opts )
 
     for e in cm_edges:
-        g.add_edge( id2vertex[e[0]], id2vertex[e[1]] )
-        num_synapses[ g.edge(id2vertex[e[0]], id2vertex[e[1]] ) ] = sum( e[2] )
-    g.edge_properties['num_synapses'] = num_synapses
+        g.add_edge( e[0], e[1], weight=sum(e[2]) )
 
     return g
+
+# Build a neuron graph from a human readable list of annotation strings
+def neuron_graph_from_annotations( annotation_list, proj_opts, anno_dict = None):
+    if anno_dict is None:
+        anno_dict = ci.get_annotation_dict( proj_opts )
+    anno_id_list = [ anno_dict[ anno ] for anno in annotation_list ]
+    skid_list = ci.get_ids_from_annotation( anno_id_list, proj_opts )
+    return neuron_graph( skid_list, proj_opts )
+
+#
+# class neuron_obj:
+#     def __init__( skid, proj_opts ):
+#         self.id = skid;
+#         skdata = ci.get_skeleton_json( self.id, proj_opts, withtags=False )

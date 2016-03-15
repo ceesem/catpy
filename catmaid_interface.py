@@ -162,6 +162,12 @@ def get_connectivity_graph( id_list, proj_opts ):
     d = requests.post( url, data = opts, auth = catmaid_auth_token( proj_opts['token'], proj_opts['authname'], proj_opts['authpass'] ) ).json()
     return d['edges']
 
+# Retrieve basic statistics about skeletons like number of synapses and total length
+def get_skeleton_statistics( skid, proj_opts ):
+    url = proj_opts['baseurl'] + '/{}/skeleton/{}/statistics'.format( proj_opts['project_id'], skid)
+    d = requests.get( url, auth = catmaid_auth_token( proj_opts['token'], proj_opts['authname'], proj_opts['authpass'] ) ).json()
+    return d
+
 #######
 
 # Parse a file to a list of skeleton ids.
