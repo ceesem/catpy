@@ -54,6 +54,11 @@ def get_skeleton_json( skeleton_id, proj_opts, withtags = True):
         d.append([])
     return d
 
+def get_connector_info( connector_id, proj_opts):
+    url = proj_opts['baseurl'] + '/{}/connectors/{}/'.format( proj_opts['project_id'], connector_id )
+    d = requests.get( url, auth = catmaid_auth_token( proj_opts['token'], proj_opts['authname'], proj_opts['authpass'] ) ).json()
+    return d
+
 # add_annotation: Add a single annotation to a list of skeleton IDs.
 def add_annotation( annotation_list, id_list, proj_opts ):
     if type(annotation_list) is not list:
