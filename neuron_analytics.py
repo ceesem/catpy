@@ -245,4 +245,4 @@ def strahler_number(neuron):
 #         nind = neuron.node2ind( id )
 #         Ab_sp[:,nind] = 0
 #
-    csgraph.component(Ab_sp)
+#    csgraph.component(Ab_sp)
