@@ -237,12 +237,18 @@ def strahler_number(neuron):
     return sn
 
 
-# def split_neuron_into_components( neuron, nodeids ):
-#     # Return n-component list, each element is a list of node ids in the component.
-#     Ab_sp = neuron.Ab
-#
-#     for id in nodeids:
-#         nind = neuron.node2ind( id )
-#         Ab_sp[:,nind] = 0
-#
-#    csgraph.component(Ab_sp)
+def split_neuron_into_components(neuron, nids):
+    # Return n-component list, each element is a list of node ids in the component.
+    # nids is a list of child nodes that will be split from their parent node.
+    Ab_sp = copy.deepcopy(neuron.Ab)
+
+    for id in nids:
+        nind = neuron.node2ind[id]
+        Ab_sp[:, nind] = 0
+
+   ncmp, cmp_label = csgraph.connected_components(Ab_sp, directed=False)
+
+   cmps = list()
+   for cmp_val in range(ncmp):
+       comp_inds = np.where( cmp_label == cmp_val )
+       cmps.append( [neuron.nodeids[ind] for ind in comp_inds[0]] )
