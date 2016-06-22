@@ -47,9 +47,12 @@ def get_skeleton_json( skeleton_id, proj_opts, withtags = True):
     d = requests.get( url, auth = catmaid_auth_token( proj_opts['token'], proj_opts['authname'], proj_opts['authpass'] ) ).json()
     d.append( skeleton_id )
     d.append( get_neuron_name( skeleton_id, proj_opts ) )
-    presyn_weight = post_synaptic_count( [conn[1] for conn in d[1] if conn[2] == 0], proj_opts )
-    if presyn_weight!=None:
-        d.append([ [cid, presyn_weight[cid]] for cid in presyn_weight.keys() ])
+    if len( d[1] ) > 0:
+        presyn_weight = post_synaptic_count( [conn[1] for conn in d[1] if conn[2] == 0], proj_opts )
+        if presyn_weight!=None:
+            d.append([ [cid, presyn_weight[cid]] for cid in presyn_weight.keys() ])
+        else:
+            d.append([])
     else:
         d.append([])
     return d
@@ -141,14 +144,17 @@ def increase_id_list( id_list, proj_opts, min_pre=0, min_post=0, hops=1):
 
 # post_synaptic_count: Count how many postsynaptic targets are associated with each connector in a list of connectors
 def post_synaptic_count( connector_list, proj_opts ):
-    url = proj_opts['baseurl'] + '/{}/connector/skeletons'.format(proj_opts['project_id'])
-    opts = {}
-    for ind, id in enumerate(connector_list):
-        opts[ 'connector_ids[{}]'.format(ind) ] = id
-    d = requests.post( url, data = opts, auth = catmaid_auth_token( proj_opts['token'], proj_opts['authname'], proj_opts['authpass'] )).json()
     nps = dict()
-    for conn in d:
-        nps[conn[0]] = len( conn[1]['postsynaptic_to'] )
+
+    if len( connector_list ) > 0:
+        url = proj_opts['baseurl'] + '/{}/connector/skeletons'.format(proj_opts['project_id'])
+        opts = {}
+        for ind, id in enumerate(connector_list):
+            opts[ 'connector_ids[{}]'.format(ind) ] = id
+        d = requests.post( url, data = opts, auth = catmaid_auth_token( proj_opts['token'], proj_opts['authname'], proj_opts['authpass'] )).json()
+        for conn in d:
+            nps[conn[0]] = len( conn[1]['postsynaptic_to'] )
+        
     return nps
 
 # write_skeletons_from_list: pull JSON files (plus key details) for

@@ -3,7 +3,6 @@ import neuron_analytics as na
 import scipy as sp
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-import seaborn as sns
 
 
 def plot_neuron( nrn, **kwargs ):
