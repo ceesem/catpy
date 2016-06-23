@@ -130,5 +130,7 @@ class SimNeuron:
         d_min = np.min( self.d[ cmpinds ])
         d_max = np.max( self.d[ cmpinds ])
         d_val = self.d[ neuron.node2ind[ nodeid ] ]
-
-        return (d_val-d_min) / (d_max - d_min)
+        if d_max != d_min:
+            return (d_val-d_min) / (d_max - d_min)
+        else:
+            return 1.0
