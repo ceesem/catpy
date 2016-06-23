@@ -21,7 +21,7 @@ def segment_graph_neuron( neuron ):
 
     return seg_graph, cmps, cmp_labels
 
-def assign_radius_by_straher( neuron, sn2radius, update=False ):
+def assign_radius_by_strahler( neuron, sn2radius, update=False ):
     # Assign a radius value (in nm) based on a strahler number lookup table
     # If sn2radius dict is shorter than the actual sn,
     # all values higher get the same radius as the max sn.
@@ -51,20 +51,25 @@ def assign_radius_uniform( neuron, r, update=False ):
 
 class SimNeuron:
     def __init__(self, neuron, define_soma=True, Ra = 100, cm = 1):
+        # Buid a hoc-ish neuron from a pythonic neuron.
+        # define_soma=True puts in a large soma-size compartment at the end, omit if not valid.
         seg_graph, cmps, cmp_labels = segment_graph_neuron( neuron )
-        self.seg_graph = seg_graph
+
         self.cmps = cmps
         self.cmp_labels = cmp_labels
-        self.create_sections( cmps, cmp_labels, neuron )
+        self.d = dist_to_root( neuron )
+
+        self.create_sections( neuron )
         self.connect_sections( seg_graph )
         self.add_cable_properties( Ra, cm)
+
         if define_soma:
             self.define_soma_at_root( neuron )
 
-    def create_sections(self, cmps, cmp_labels, neuron):
+    def create_sections(self, neuron):
         d = dist_to_root(neuron)
         self.sections = []
-        for ii, cmp in enumerate(cmps):
+        for ii, cmp in enumerate(self.cmps):
             self.sections.append( h.Section( name='cmp'+str(ii), cell=self) )
             cmpinds = [neuron.node2ind[ nid ] for nid in cmp]
             ptord = np.argsort( d[ cmpinds ] )
@@ -76,15 +81,9 @@ class SimNeuron:
                  sec=self.sections[-1]
                  ) # Remember that NEURON is tied to microns, CATMAID to nm.
 
-    def connect_sections(self, seg_graph):
+    def connect_sections( self, seg_graph ):
         for child in seg_graph.keys():
             self.sections[child].connect( self.sections[ seg_graph[child] ](1) )
-
-    def find_section_from_nodeid( self, nodeid ):
-        # Return the section containing a given nodeid,
-        # useful for adjusting specific parts of neurons
-        cmp_num = self.cmp_labels[nodeid]
-        return self.sections[cmp_num]
 
     def add_cable_properties(self, Ra, Cm):
         for section in self.sections:
@@ -108,3 +107,28 @@ class SimNeuron:
             sec.insert('pas')
             sec.g_pas = g_pas
             sec.e_pas = e_pas
+
+    def add_hh_channels(self, sections, gnabar_hh=0.12, gkbar_hh=0.036, gl_hh=0.0003, el_hh=-65):
+        for sec in sections:
+            sec.insert('hh')
+            sec.gnabar_hh = gnabar_hh
+            sec.gkbar_hh = gkbar_hh
+            sec.gl_hh = gl_hh
+            sec.el_hh = el_hh
+
+    def find_section_from_nodeid( self, nodeid ):
+        # Return the section containing a given nodeid,
+        # useful for adjusting specific parts of neurons
+        cmp_num = self.cmp_labels[nodeid]
+        return self.sections[cmp_num]
+
+    def location_on_section( self, nodeid, neuron ):
+        # returns the normalized distance down the section at which a given node is.
+        cmp = self.cmps[ self.cmp_labels[nodeid] ]
+
+        cmpinds = [neuron.node2ind[ nid ] for nid in cmp]
+        d_min = np.min( self.d[ cmpinds ])
+        d_max = np.max( self.d[ cmpinds ])
+        d_val = self.d[ neuron.node2ind[ nodeid ] ]
+
+        return (d_val-d_min) / (d_max - d_min)
