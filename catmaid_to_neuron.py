@@ -58,6 +58,7 @@ class SimNeuron:
         self.cmps = cmps
         self.cmp_labels = cmp_labels
         self.d = dist_to_root( neuron )
+        self.node2ind = neuron.node2ind
 
         self.create_sections( neuron )
         self.connect_sections( seg_graph )
@@ -87,6 +88,7 @@ class SimNeuron:
 
     def add_cable_properties(self, Ra, Cm):
         for section in self.sections:
+            section.nseg = 11
             section.Ra = Ra
             section.cm = Cm
 
@@ -96,6 +98,7 @@ class SimNeuron:
         root_section.connect( self.sections[-1](1) )
         self.sections[-1].L = L * 0.001
         self.sections[-1].diam = 2*rad * 0.001
+        self.soma = self.sections[-1]
         h.define_shape()
 
     def define_subsets(self ):
@@ -122,15 +125,53 @@ class SimNeuron:
         cmp_num = self.cmp_labels[nodeid]
         return self.sections[cmp_num]
 
-    def location_on_section( self, nodeid, neuron ):
+    def location_on_section( self, nodeid ):
         # returns the normalized distance down the section at which a given node is.
         cmp = self.cmps[ self.cmp_labels[nodeid] ]
 
-        cmpinds = [neuron.node2ind[ nid ] for nid in cmp]
+        cmpinds = [self.node2ind[ nid ] for nid in cmp]
         d_min = np.min( self.d[ cmpinds ])
         d_max = np.max( self.d[ cmpinds ])
-        d_val = self.d[ neuron.node2ind[ nodeid ] ]
+        d_val = self.d[ self.node2ind[ nodeid ] ]
         if d_max != d_min:
             return (d_val-d_min) / (d_max - d_min)
         else:
             return 1.0
+
+
+def attach_current_clamp(nodeid, sim_neuron, delay=1, dur=1, amp=.1):
+    sec = sim_neuron.find_section_from_nodeid( nodeid )
+    loc = sim_neuron.location_on_section( nodeid )
+
+    stim = h.IClamp( sec(loc) )
+    stim.delay = delay
+    stim.dur = dur
+    stim.amp = amp
+    return stim
+
+def record_v(nodeid, sim_neuron):
+    sec = sim_neuron.find_section_from_nodeid( nodeid )
+    loc = sim_neuron.location_on_section( nodeid )
+
+    out_vec = h.Vector()   # Membrane potential vector at soma
+    out_vec.record(sec( loc )._ref_v)
+
+    return out_vec
+
+def record_v_at_soma(sim_neuron):
+    sec = sim_neuron.soma
+    loc = 0.5
+
+    out_vec = h.Vector()   # Membrane potential vector at soma
+    out_vec.record(sec( loc )._ref_v)
+
+    return out_vec
+
+def record_time( sim_neuron ):
+    t_vec = h.Vector()
+    t_vec.record(h._ref_t)
+    return t_vec
+
+def simulate(tstop=25):
+    h.tstop = tstop
+    h.run()
