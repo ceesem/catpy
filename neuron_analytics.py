@@ -46,11 +46,10 @@ def neuron_graph_from_annotations(annotation_list, proj_opts, anno_dict=None, ap
 
     return g
 
-# Given a list of annotations (as a string), add a node property to each
-# skeleton containing which annotations they have
-
 
 def append_annotation_list(g, annotation_list, proj_opts, anno_dict=None):
+    # Given a list of annotations (as a string), add a node property to each
+    # skeleton containing which annotations they have
     if anno_dict is None:
         anno_dict = ci.get_annotation_dict(proj_opts)
 
@@ -90,10 +89,10 @@ class SynapseListObj:
         else:
             raise NameError('category should be pre or post only')
 
-        self.connids = [dat[1] for dat in skdata[1] if dat[2] == cat_ind]
-        self.connid2nodeid = {dat[1]: dat[0]
+        self.conn_ids = [dat[1] for dat in skdata[1] if dat[2] == cat_ind]
+        self.conn_id2node_id = {dat[1]: dat[0]
                               for dat in skdata[1] if dat[2] == cat_ind}
-        self.connid2loc = {dat[1]: dat[3:6]
+        self.conn_id2loc = {dat[1]: dat[3:6]
                            for dat in skdata[1] if dat[2] == cat_ind}
 
 
@@ -103,14 +102,16 @@ class InputSynapseListObj(SynapseListObj):
         SynapseListObj.__init__(self, skdata, 'post', proj_opts)
 
     def num(self):
-        return len(self.connids)
+        return len(self.conn_ids)
 
 
 class OutputSynapseListObj(SynapseListObj):
 
     def __init__(self, skdata, proj_opts):
         SynapseListObj.__init__(self, skdata, 'pre', proj_opts)
-        self.num_targets = {val[0]: val[1] for val in skdata[5]}
+
+    def num_targets( self ):
+        return {val[0]: val[1] for val in skdata[5]}
 
     def num(self):
         return sum(self.num_targets.values())
@@ -122,7 +123,7 @@ class NeuronObj:
         self.id = skid
         skdata = ci.get_skeleton_json(self.id, proj_opts)
         self.name = skdata[4]
-        self.tags = skdata[3]
+        self.tags = skdata[2]
 
         self.nodeids = [nd[0] for nd in skdata[0]]
         self.nodeloc = {nd[0]: nd[3:6] for nd in skdata[0]}
@@ -158,17 +159,17 @@ class SynapseDict:
         self.post_skid = defaultdict(list)
         for neuron in neuron_list:
             rel_skid = neuron.id
-            for connid in neuron.inputs.connids:
+            for connid in neuron.inputs.conn_ids:
                 self.post_skid[connid].append(rel_skid)
-            for connid in neuron.outputs.connids:
+            for connid in neuron.outputs.conn_ids:
                 self.pre_skid[connid] = rel_skid
 
     def update_synapse_dict(self, neuron_list):
         for neuron in neuron_list:
             rel_skid = neuron.id
-            for connid in neuron.inputs.connids:
+            for connid in neuron.inputs.conn_ids:
                 self.post_skid[connid].append(rel_skid)
-            for connid in neuron.outputs.connids:
+            for connid in neuron.outputs.conn_ids:
                 self.pre_skid[connid] = rel_skid
 
 
@@ -242,6 +243,34 @@ def strahler_number(neuron):
 
     return sn
 
+def get_adjacency_matrix( neurons, syns ):
+    # Build a weighted adjacency matrix from neurons
+    A = np.zeros( (len(neurons), len(neurons)) )
+    skid_to_ind = { skid:ii for ii, skid in enumerate([nrn.id for nrn in neurons])}
+    ind_to_skid = { ii:skid for ii, skid in enumerate([nrn.id for nrn in neurons])}
+
+    for nrn in neurons:
+        for conn_id in nrn.outputs.conn_ids:
+            for targ in syns.post_skid[ conn_id ]:
+                A[ skid_to_ind[ targ ], skid_to_ind[ nrn.id ]] += 1
+
+    return A, skid_to_ind, ind_to_skid
+
+def group_adjacency_matrix( neurons, syns, groups ):
+    # Adjacency matrix where the entries are for groups, not neurons.
+    # Groups come in a list of lists of skeleton ids.
+    A, skid_to_ind, ind_to_skid = get_adjacency_matrix( neurons, syns )
+    Agr = np.zeros( ( len(groups), len(groups) ) )
+    for ii, grp_post in enumerate( groups ):
+        for jj, grp_pre in enumerate( groups ):
+            Ared = A[ [ skid_to_ind[ post ] for post in grp_post],:][:,[skid_to_ind[pre] for pre in grp_pre] ]
+            Agr[ ii, jj ] = np.sum( Ared )
+    return Agr
+
+def split_neuron_by_tag( neuron, tag_str ):
+    nids = neuron.tags[ tag_str ]
+    cmps, cmp_label = split_neuron_into_components( neuron, nids )
+    return cmps, cmp_label
 
 def split_neuron_into_components(neuron, nids, from_parent=True):
     # Return n-component list, each element is a list of node ids in the component.
