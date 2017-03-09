@@ -1,5 +1,4 @@
 import catmaid_interface as ci
-import networkx as nx
 import scipy as sp
 import numpy as np
 from scipy import spatial
@@ -7,7 +6,6 @@ import scipy.sparse.csgraph as csgraph
 import scipy.sparse as sparse
 from collections import defaultdict
 import copy
-
 
 def neuron_graph(id_list, proj_opts):
     # Build a networkx neuron graph from a list of skeleton ids
@@ -26,7 +24,7 @@ def neuron_graph(id_list, proj_opts):
 
 
 def neuron_graph_from_annotations(annotation_list, proj_opts, anno_dict=None, append_annotations=True):
-    # Build a neuron graph from a human readable list of annotation strings
+    # Build a neuron graph from a readable list of annotation strings
     if anno_dict is None:
         anno_dict = ci.get_annotation_dict(proj_opts)
 
@@ -109,12 +107,10 @@ class OutputSynapseListObj(SynapseListObj):
 
     def __init__(self, skdata, proj_opts):
         SynapseListObj.__init__(self, skdata, 'pre', proj_opts)
-
-    def num_targets( self ):
-        return {val[0]: val[1] for val in skdata[5]}
+        self.num_targets = {val[0]: val[1] for val in skdata[5]}
 
     def num(self):
-        return sum(self.num_targets.values())
+        return sum( self.num_targets.values() )
 
 
 class NeuronObj:
@@ -148,8 +144,25 @@ class NeuronObj:
         self.inputs = InputSynapseListObj(skdata, proj_opts)
         self.outputs = OutputSynapseListObj(skdata, proj_opts)
 
+    def __str__( self ):
+        return self.name
+
     def cable_length(self):     # Length in nm, unsmoothed
         return self.A.sum()
+
+    def get_url_to_node( self, nodeid, proj_opts, printflag=True, zoomlevel = 0 ):
+        ur = ci.get_catmaid_url(
+                proj_opts,
+                self.nodeloc[nodeid],
+                nodeid=nodeid,
+                skid = self.id,
+                zoomlevel=zoomlevel)
+        if printflag:
+            print( ur )
+            return
+        else:
+            return ur
+
 
 
 class SynapseDict:
@@ -212,10 +225,15 @@ def minimal_paths(nrn):
 
     return min_paths
 
+def neurons_from_annotations( annotation_list, proj_opts, syns=None):
+    anno_dict = ci.get_annotation_dict( proj_opts )
+    id_list = ci.get_ids_from_annotation( [anno_dict[anno] for anno in annotation_list], proj_opts )
+    (neurons, syns) = neurons_from_id_list( id_list, proj_opts, syns=syns)
+    return (neurons, syns)
 
-def neuron_list(id_list, proj_opts, syns=None):
+def neurons_from_id_list(id_list, proj_opts, syns=None):
     # Given a list of ids, build a list of NeuronObj and a SynapseDict
-    # associated with them.
+    # associated with them, if one is already pre-existing
     neurons = [NeuronObj(id, proj_opts) for id in id_list]
 
     if syns is None:
@@ -243,7 +261,7 @@ def strahler_number(neuron):
 
     return sn
 
-def get_adjacency_matrix( neurons, syns ):
+def get_adjacency_matrix( neurons, syns, input_normalized = False ):
     # Build a weighted adjacency matrix from neurons
     A = np.zeros( (len(neurons), len(neurons)) )
     skid_to_ind = { skid:ii for ii, skid in enumerate([nrn.id for nrn in neurons])}
@@ -252,11 +270,14 @@ def get_adjacency_matrix( neurons, syns ):
     for nrn in neurons:
         for conn_id in nrn.outputs.conn_ids:
             for targ in syns.post_skid[ conn_id ]:
-                A[ skid_to_ind[ targ ], skid_to_ind[ nrn.id ]] += 1
+                if input_normalized is True:
+                    A[ skid_to_ind[ targ ], skid_to_ind[ nrn.id ]] += 1.0 / neurons[ skid_to_ind[ targ ] ].inputs.num()
+                else:
+                    A[ skid_to_ind[ targ ], skid_to_ind[ nrn.id ]] += 1
 
     return A, skid_to_ind, ind_to_skid
 
-def group_adjacency_matrix( neurons, syns, groups ):
+def group_adjacency_matrix( neurons, syns, groups, func=np.sum ):
     # Adjacency matrix where the entries are for groups, not neurons.
     # Groups come in a list of lists of skeleton ids.
     A, skid_to_ind, ind_to_skid = get_adjacency_matrix( neurons, syns )
@@ -264,13 +285,31 @@ def group_adjacency_matrix( neurons, syns, groups ):
     for ii, grp_post in enumerate( groups ):
         for jj, grp_pre in enumerate( groups ):
             Ared = A[ [ skid_to_ind[ post ] for post in grp_post],:][:,[skid_to_ind[pre] for pre in grp_pre] ]
-            Agr[ ii, jj ] = np.sum( Ared )
+            Agr[ ii, jj ] = func( Ared )
     return Agr
 
 def split_neuron_by_tag( neuron, tag_str ):
     nids = neuron.tags[ tag_str ]
     cmps, cmp_label = split_neuron_into_components( neuron, nids )
     return cmps, cmp_label
+
+def sort_neurons_by( neurons, sort_vector ):
+    if len( sort_vector ) != len( neurons ):
+        print( 'Vector must be same length as neurons' )
+        return -1
+    new_vector, new_neurons = zip( *sorted( zip( sort_vector,neurons ) ) )
+    return new_neurons
+
+def find_ids_by_name( neurons, name_pattern ):
+    # Use regex to find sk_ids of neurons that match a given search pattern.
+    ids_found = []
+    return [ nrn.id for nrn in neurons if re.search(name_pattern, nrn.name) is not None ]
+
+def number_inputs( neurons ):
+    return [nrn.inputs.num() for nrn in neurons]
+
+def number_outputs( neurons ):
+    return [nrn.outputs.num() for nrn in neurons]
 
 def split_neuron_into_components(neuron, nids, from_parent=True):
     # Return n-component list, each element is a list of node ids in the component.

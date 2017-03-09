@@ -26,6 +26,28 @@ def set_project_opts( baseurl, project_id, token, authname = None, authpass = No
     proj_opts['authpass'] = authpass
     return proj_opts
 
+def get_catmaid_url( proj_opts, xyz, nodeid=None, skid=None, tool='tracingtool',zoomlevel=0):
+    baseurl = proj_opts['baseurl'] + '/?'
+    pid_str = 'pid=' + proj_opts['project_id']
+    x_str = 'xp=' + str( xyz[0] )
+    y_str = 'yp=' + str( xyz[1] )
+    z_str = 'zp=' + str( xyz[2] )
+    tool_str = 'tool=' + tool
+    sid_str = 'sid0=1'
+    zoom_str = 's0=' + str( zoomlevel )
+    if skid is not None and nodeid is not None:
+        node_str = 'active_node_id=' + str( nodeid )
+        skid_str = 'active_skeleton_id=' + str( skid )
+        strs = [baseurl,pid_str,x_str,y_str,z_str,node_str,skid_str,tool_str,sid_str,zoom_str]
+    else:
+        strs = [baseurl,pid_str,x_str,y_str,z_str,tool_str,sid_str,zoom_str]
+    return '&'.join(strs)
+
+
+
+
+
+
 # get_neuron_name: Given a skeleton ID, fetch the neuron name
 def get_neuron_name( skeleton_id, proj_opts ):
     url = proj_opts['baseurl'] + '/{}/skeleton/{}/neuronname'.format( proj_opts['project_id'], skeleton_id)
@@ -154,7 +176,7 @@ def post_synaptic_count( connector_list, proj_opts ):
         d = requests.post( url, data = opts, auth = catmaid_auth_token( proj_opts['token'], proj_opts['authname'], proj_opts['authpass'] )).json()
         for conn in d:
             nps[conn[0]] = len( conn[1]['postsynaptic_to'] )
-        
+
     return nps
 
 # write_skeletons_from_list: pull JSON files (plus key details) for
