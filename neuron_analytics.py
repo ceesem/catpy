@@ -22,7 +22,6 @@ def neuron_graph(id_list, proj_opts):
 
     return g
 
-
 def neuron_graph_from_annotations(annotation_list, proj_opts, anno_dict=None, append_annotations=True):
     # Build a neuron graph from a readable list of annotation strings
     if anno_dict is None:
@@ -44,7 +43,6 @@ def neuron_graph_from_annotations(annotation_list, proj_opts, anno_dict=None, ap
 
     return g
 
-
 def append_annotation_list(g, annotation_list, proj_opts, anno_dict=None):
     # Given a list of annotations (as a string), add a node property to each
     # skeleton containing which annotations they have
@@ -64,7 +62,6 @@ def append_annotation_list(g, annotation_list, proj_opts, anno_dict=None):
         except KeyError:
             print('Not a valid key: ' + anno + ' (skipping)')
     return g
-
 
 def write_node_info(g, filename, delimiter=','):
     f_nodeinfo = open(filename, 'w')
@@ -257,6 +254,16 @@ class SynapseObject:
         conndata = ci.get_connector_data( post_conn_ids, proj_opts )
         self.connectors = { dat[0] : dat[1] for dat in conndata }
 
+def annotations_from_neurons( neurons, proj_opts ):
+    anno_dat = ci.get_annotations( [nrn.id for nrn in neurons], proj_opts )
+    anno_dict = {}
+    for anno_id in anno_dat['annotations']:
+        anno_dict[ int(anno_id) ] = {'str' : anno_dat['annotations'][anno_id], 'skids': [] }
+    for skid in anno_dat['skeletons']:
+        for anno_info in anno_dat['skeletons'][skid]:
+            anno_dict[ anno_info['id'] ][ 'skids' ].append( int(skid) )
+    return anno_dict
+
 def neurons_from_annotations( annotation_list, proj_opts ):
     anno_dict = ci.get_annotation_dict( proj_opts )
     id_list = ci.get_ids_from_annotation( [anno_dict[anno] for anno in annotation_list], proj_opts )
@@ -266,16 +273,15 @@ def neurons_from_annotations( annotation_list, proj_opts ):
 def neurons_from_id_list(id_list, proj_opts ):
     # Given a list of ids, build a list of NeuronObjs
     # associated with them, if one is already pre-existing
-    neurons = [NeuronObj(id, proj_opts) for id in id_list]
+    neurons = { id : NeuronObj(id, proj_opts) for id in id_list}
     return neurons
 
 def get_adjacency_matrix( neurons, input_normalized = False ):
     # Build a weighted adjacency matrix from neurons
     A = np.zeros( (len(neurons), len(neurons)) )
-    skid_to_ind = { skid:ii for ii, skid in enumerate([nrn.id for nrn in neurons])}
-    ind_to_skid = { ii:skid for ii, skid in enumerate([nrn.id for nrn in neurons])}
-    ids = [nrn.id for nrn in neurons]
-    for nrn in neurons:
+    skid_to_ind = { skid:ii for ii, skid in enumerate(neurons) }
+    ind_to_skid = { ii:skid for ii, skid in enumerate(neurons)}
+    for nrn in neurons.values():
         for conn_id in nrn.outputs.target_ids:
             for targ in nrn.outputs.target_ids[conn_id]:
                 if targ in ids:
@@ -308,7 +314,7 @@ def find_ids_by_name( neurons, name_pattern ):
     ids_found = []
     return [ nrn.id for nrn in neurons if re.search(name_pattern, nrn.name) is not None ]
 
-def number_inputs( neurons ):
+def number_ginputs( neurons ):
     return [nrn.inputs.num() for nrn in neurons]
 
 def number_outputs( neurons ):

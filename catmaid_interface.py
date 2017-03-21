@@ -43,11 +43,6 @@ def get_catmaid_url( proj_opts, xyz, nodeid=None, skid=None, tool='tracingtool',
         strs = [baseurl,pid_str,x_str,y_str,z_str,tool_str,sid_str,zoom_str]
     return '&'.join(strs)
 
-
-
-
-
-
 # get_neuron_name: Given a skeleton ID, fetch the neuron name
 def get_neuron_name( skeleton_id, proj_opts ):
     url = proj_opts['baseurl'] + '/{}/skeleton/{}/neuronname'.format( proj_opts['project_id'], skeleton_id)
@@ -210,7 +205,13 @@ def get_skeleton_statistics( skid, proj_opts ):
     d = requests.get( url, auth = catmaid_auth_token( proj_opts['token'], proj_opts['authname'], proj_opts['authpass'] ) ).json()
     return d
 
-#######
+def get_annotations( skid_list, proj_opts ):
+    url = proj_opts['baseurl'] + '/{}/annotations/forskeletons'.format( proj_opts['project_id'] )
+    opts = {}
+    for i, id in enumerate( skid_list ):
+            opts['skeleton_ids[{}]'.format(i)] = id
+    d = requests.post( url, data = opts, auth = catmaid_auth_token( proj_opts['token'], proj_opts['authname'], proj_opts['authpass'] ) ).json()
+    return d
 
 # Parse a file to a list of skeleton ids.
 def import_ids(filename):
