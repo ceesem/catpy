@@ -179,6 +179,15 @@ def post_synaptic_count( connector_list, proj_opts ):
 
     return nps
 
+def get_connector_data( connector_list, proj_opts ):
+    if len( connector_list ) > 0:
+        url = proj_opts['baseurl'] + '/{}/connector/skeletons'.format(proj_opts['project_id'])
+        opts = {}
+        for ind, id in enumerate(connector_list):
+            opts[ 'connector_ids[{}]'.format(ind) ] = id
+        d = requests.post( url, data = opts, auth = catmaid_auth_token( proj_opts['token'], proj_opts['authname'], proj_opts['authpass'] )).json()
+    return d
+
 # write_skeletons_from_list: pull JSON files (plus key details) for
 def write_skeletons_from_list( id_list, proj_opts ):
     for id in id_list:

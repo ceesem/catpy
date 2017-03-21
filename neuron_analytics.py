@@ -76,42 +76,44 @@ def write_node_info(g, filename, delimiter=','):
         f_nodeinfo.write('\n')
     f_nodeinfo.close()
 
-
 class SynapseListObj:
-
-    def __init__(self, skdata, category, proj_opts):
-        if category == 'pre':
-            cat_ind = 0
-        elif category == 'post':
-            cat_ind = 1
-        else:
-            raise NameError('category should be pre or post only')
-
-        self.conn_ids = [dat[1] for dat in skdata[1] if dat[2] == cat_ind]
-        self.conn_id2node_id = {dat[1]: dat[0]
-                              for dat in skdata[1] if dat[2] == cat_ind}
-        self.conn_id2loc = {dat[1]: dat[3:6]
-                           for dat in skdata[1] if dat[2] == cat_ind}
-
+    def __init__(self, conndata ):
+        self.conn_ids = [ dat[0] for dat in conndata ]
 
 class InputSynapseListObj(SynapseListObj):
-
-    def __init__(self, skdata, proj_opts):
-        SynapseListObj.__init__(self, skdata, 'post', proj_opts)
-
+    def __init__(self, conndata, self_id):
+        SynapseListObj.__init__(self, conndata )
+        self.target_node_ids = {}
+        for dat in conndata:
+            for skid, nid in zip( dat[1]['postsynaptic_to'], dat[1]['postsynaptic_to_node'] ):
+                if skid == self_id:
+                    if dat[0] in self.target_node_ids:
+                        self.target_node_ids[ dat[0] ].append(nid)
+                    else:
+                        self.target_node_ids[ dat[0] ] = [nid]
+        self.from_ids = { dat[0] : dat[1]['presynaptic_to'] for dat in conndata }
+        self.from_node_ids = { dat[0] : dat[1]['presynaptic_to_node'] for dat in conndata }
     def num(self):
-        return len(self.conn_ids)
-
+        return sum( map( lambda x: len(x), self.target_node_ids.values() ) )
 
 class OutputSynapseListObj(SynapseListObj):
+    def __init__(self, conndata, self_id):
+        SynapseListObj.__init__(self, conndata )
+        self.from_node_ids = {dat[0] : dat[1]['presynaptic_to_node'] for dat in conndata }
+        self.target_ids = { dat[0] : dat[1]['postsynaptic_to'] for dat in conndata }
+        self.target_node_ids = {dat[0] : dat[1]['postsynaptic_to_node'] for dat in conndata }
 
-    def __init__(self, skdata, proj_opts):
-        SynapseListObj.__init__(self, skdata, 'pre', proj_opts)
-        self.num_targets = {val[0]: val[1] for val in skdata[5]}
+    def num_targets( self ):
+        return {id : len(self.target_ids[id]) for id in self.target_ids}
+
+    def num_targets_connector( self, conn_id):
+        if conn_id in self.target_ids:
+            return len( self.target_ids[conn_id])
+        else:
+            print( 'No such presynaptic connector id in neuron' )
 
     def num(self):
-        return sum( self.num_targets.values() )
-
+        return sum( self.num_targets().values() )
 
 class NeuronObj:
 
@@ -141,8 +143,10 @@ class NeuronObj:
                 self.Ab[self.node2ind[key], self.node2ind[
                     self.nodeparent[key]]] = 1
 
-        self.inputs = InputSynapseListObj(skdata, proj_opts)
-        self.outputs = OutputSynapseListObj(skdata, proj_opts)
+        pre_conn_ids = [dat[1] for dat in skdata[1] if dat[2] == 0]
+        post_conn_ids = [dat[1] for dat in skdata[1] if dat[2] == 1]
+        self.inputs = InputSynapseListObj( ci.get_connector_data( post_conn_ids, proj_opts ), self.id )
+        self.outputs = OutputSynapseListObj( ci.get_connector_data( pre_conn_ids, proj_opts ), self.id )
 
     def __str__( self ):
         return self.name
@@ -163,118 +167,122 @@ class NeuronObj:
         else:
             return ur
 
+    def find_end_nodes(self):
+        # Returns a list of node ids that are end nodes (have no children)
+        y = np.where(self.Ab.sum(0) == 0)[1]
+        return [self.nodeids[ind] for ind in y]
 
+    def find_branch_points(self):
+        # Returns a list of node ids that are branch points (have multiple children)
+        y = np.where(self.Ab.sum(0) > 1)[1]
+        return [self.nodeids[ind] for ind in y]
 
-class SynapseDict:
+    def minimal_paths(self):
+        # Returns list of lists, the minimally overlapping paths from each end
+        # point toward root
+        D = dist_to_root(self)
+        ids_end = self.find_end_nodes()
 
-    def __init__(self, neuron_list):
-        self.pre_skid = dict()
-        self.post_skid = defaultdict(list)
-        for neuron in neuron_list:
-            rel_skid = neuron.id
-            for connid in neuron.inputs.conn_ids:
-                self.post_skid[connid].append(rel_skid)
-            for connid in neuron.outputs.conn_ids:
-                self.pre_skid[connid] = rel_skid
+        ends_sorted = [ids_end[ind] for ind in np.argsort(
+            D[[self.node2ind[id] for id in ids_end]])[::-1]]
+        not_visited = [True] * len(self.nodeids)
+        min_paths = []
 
-    def update_synapse_dict(self, neuron_list):
-        for neuron in neuron_list:
-            rel_skid = neuron.id
-            for connid in neuron.inputs.conn_ids:
-                self.post_skid[connid].append(rel_skid)
-            for connid in neuron.outputs.conn_ids:
-                self.pre_skid[connid] = rel_skid
+        for start_nd in ends_sorted:
+            nd = start_nd
+            min_paths.append([nd])   # Start a new list with this end as a seed
+            while not_visited[self.node2ind[nd]] and (self.nodeparent[nd] is not None):
+                not_visited[self.node2ind[nd]] = False
+                nd = self.nodeparent[nd]
+                min_paths[-1].append(nd)
 
+        return min_paths
 
-def dist_to_root(nrn):
-    # Returns distance to root for each node in nrn as an array
-    D = csgraph.shortest_path(
-        nrn.A.transpose(), directed=True, unweighted=False, method='D')
-    return D[nrn.node2ind[nrn.root]]
+    def strahler_number(self):
+        # Computes strahler number for a neuron
+        paths = self.minimal_paths()
+        sn = {}
+        for nid in self.nodeids:
+            sn[nid] = 0
 
+        for path in paths[::-1]:
+            sn[path[0]] = 1
+            for ii, nid in enumerate(path[1:]):
+                if sn[nid] == sn[path[ii]]:
+                    sn[nid] = sn[path[ii]] + 1
+                else:
+                    sn[nid] = sn[path[ii]]
+        return sn
 
-def find_end_nodes(nrn):
-    # Returns a list of node ids that are end nodes (have no children)
-    y = np.where(nrn.Ab.sum(0) == 0)[1]
-    return [nrn.nodeids[ind] for ind in y]
+    def split_into_components(self, nids, from_parent=True):
+        # Return n-component list, each element is a list of node ids in the component.
+        # nids is a list of child nodes that will be split from their parent node.
+        # if from_parent is toggled false, parents divorce childen and not the
+        # default.
+        Ab_sp = copy.deepcopy(self.Ab)
 
-def find_branch_points(nrn):
-    # Returns a list of node ids that are branch points (have multiple children)
-    y = np.where(nrn.Ab.sum(0) > 1)[1]
-    return [nrn.nodeids[ind] for ind in y]
+        if from_parent:
+            for id in nids:
+                nind = self.node2ind[id]
+                Ab_sp[:, nind] = 0
+        else:
+            for id in nids:
+                nind = self.node2ind[id]
+                Ab_sp[nind, :] = 0
 
+        ncmp, cmp_label = csgraph.connected_components(Ab_sp, directed=False)
 
-def minimal_paths(nrn):
-    # Returns list of lists, the minimally overlapping paths from each end
-    # point toward root
-    D = dist_to_root(nrn)
-    ids_end = find_end_nodes(nrn)
+        cmps = list()
+        for cmp_val in range(ncmp):
+            comp_inds = np.where(cmp_label == cmp_val)
+            cmps.append([self.nodeids[ind] for ind in comp_inds[0]])
 
-    ends_sorted = [ids_end[ind] for ind in np.argsort(
-        D[[nrn.node2ind[id] for id in ids_end]])[::-1]]
-    not_visited = [True] * len(nrn.nodeids)
-    min_paths = []
+        cmp_label_dict = {self.nodeids[ind]:cmp for ind,cmp in enumerate(cmp_label) }
 
-    for start_nd in ends_sorted:
-        nd = start_nd
-        min_paths.append([nd])   # Start a new list with this end as a seed
-        while not_visited[nrn.node2ind[nd]] and (nrn.nodeparent[nd] is not None):
-            not_visited[nrn.node2ind[nd]] = False
-            nd = nrn.nodeparent[nd]
-            min_paths[-1].append(nd)
+        return cmps, cmp_label_dict
 
-    return min_paths
+    def dist_to_root(self):
+        # Returns distance to root for each node in nrn as an array
+        D = csgraph.shortest_path(
+            self.A.transpose(), directed=True, unweighted=False, method='D')
+        return D[self.node2ind[self.root]]
 
-def neurons_from_annotations( annotation_list, proj_opts, syns=None):
+    def split_by_tag( self, tag_str ):
+        nids = self.tags[ tag_str ]
+        cmps, cmp_label = self.split_into_components( nids )
+        return cmps, cmp_label
+
+class SynapseObject:
+    def __init__(self, conn_ids, proj_opts ):
+        conndata = ci.get_connector_data( post_conn_ids, proj_opts )
+        self.connectors = { dat[0] : dat[1] for dat in conndata }
+
+def neurons_from_annotations( annotation_list, proj_opts ):
     anno_dict = ci.get_annotation_dict( proj_opts )
     id_list = ci.get_ids_from_annotation( [anno_dict[anno] for anno in annotation_list], proj_opts )
-    (neurons, syns) = neurons_from_id_list( id_list, proj_opts, syns=syns)
-    return (neurons, syns)
+    neurons = neurons_from_id_list( id_list, proj_opts )
+    return neurons
 
-def neurons_from_id_list(id_list, proj_opts, syns=None):
-    # Given a list of ids, build a list of NeuronObj and a SynapseDict
+def neurons_from_id_list(id_list, proj_opts ):
+    # Given a list of ids, build a list of NeuronObjs
     # associated with them, if one is already pre-existing
     neurons = [NeuronObj(id, proj_opts) for id in id_list]
+    return neurons
 
-    if syns is None:
-        syns = SynapseDict(neurons)
-    else:
-        syns.update_synapse_dict(neurons)
-
-    return (neurons, syns)
-
-
-def strahler_number(neuron):
-    # Computes strahler number for a neuron
-    paths = minimal_paths(neuron)
-    sn = {}
-    for nid in neuron.nodeids:
-        sn[nid] = 0
-
-    for path in paths[::-1]:
-        sn[path[0]] = 1
-        for ii, nid in enumerate(path[1:]):
-            if sn[nid] == sn[path[ii]]:
-                sn[nid] = sn[path[ii]] + 1
-            else:
-                sn[nid] = sn[path[ii]]
-
-    return sn
-
-def get_adjacency_matrix( neurons, syns, input_normalized = False ):
+def get_adjacency_matrix( neurons, input_normalized = False ):
     # Build a weighted adjacency matrix from neurons
     A = np.zeros( (len(neurons), len(neurons)) )
     skid_to_ind = { skid:ii for ii, skid in enumerate([nrn.id for nrn in neurons])}
     ind_to_skid = { ii:skid for ii, skid in enumerate([nrn.id for nrn in neurons])}
-
+    ids = [nrn.id for nrn in neurons]
     for nrn in neurons:
-        for conn_id in nrn.outputs.conn_ids:
-            for targ in syns.post_skid[ conn_id ]:
-                if input_normalized is True:
-                    A[ skid_to_ind[ targ ], skid_to_ind[ nrn.id ]] += 1.0 / neurons[ skid_to_ind[ targ ] ].inputs.num()
-                else:
-                    A[ skid_to_ind[ targ ], skid_to_ind[ nrn.id ]] += 1
-
+        for conn_id in nrn.outputs.target_ids:
+            for targ in nrn.outputs.target_ids[conn_id]:
+                if targ in ids:
+                    if input_normalized is True:
+                        A[ skid_to_ind[ targ ], skid_to_ind[ nrn.id ]] += 1.0 / neurons[ skid_to_ind[ targ ] ].inputs.num()
+                    else:
+                        A[ skid_to_ind[ targ ], skid_to_ind[ nrn.id ]] += 1
     return A, skid_to_ind, ind_to_skid
 
 def group_adjacency_matrix( neurons, syns, groups, func=np.sum ):
@@ -287,11 +295,6 @@ def group_adjacency_matrix( neurons, syns, groups, func=np.sum ):
             Ared = A[ [ skid_to_ind[ post ] for post in grp_post],:][:,[skid_to_ind[pre] for pre in grp_pre] ]
             Agr[ ii, jj ] = func( Ared )
     return Agr
-
-def split_neuron_by_tag( neuron, tag_str ):
-    nids = neuron.tags[ tag_str ]
-    cmps, cmp_label = split_neuron_into_components( neuron, nids )
-    return cmps, cmp_label
 
 def sort_neurons_by( neurons, sort_vector ):
     if len( sort_vector ) != len( neurons ):
@@ -310,30 +313,3 @@ def number_inputs( neurons ):
 
 def number_outputs( neurons ):
     return [nrn.outputs.num() for nrn in neurons]
-
-def split_neuron_into_components(neuron, nids, from_parent=True):
-    # Return n-component list, each element is a list of node ids in the component.
-    # nids is a list of child nodes that will be split from their parent node.
-    # if from_parent is toggled false, parents divorce childen and not the
-    # default.
-    Ab_sp = copy.deepcopy(neuron.Ab)
-
-    if from_parent:
-        for id in nids:
-            nind = neuron.node2ind[id]
-            Ab_sp[:, nind] = 0
-    else:
-        for id in nids:
-            nind = neuron.node2ind[id]
-            Ab_sp[nind, :] = 0
-
-    ncmp, cmp_label = csgraph.connected_components(Ab_sp, directed=False)
-
-    cmps = list()
-    for cmp_val in range(ncmp):
-        comp_inds = np.where(cmp_label == cmp_val)
-        cmps.append([neuron.nodeids[ind] for ind in comp_inds[0]])
-
-    cmp_label_dict = {neuron.nodeids[ind]:cmp for ind,cmp in enumerate(cmp_label) }
-
-    return cmps, cmp_label_dict
